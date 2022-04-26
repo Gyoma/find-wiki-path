@@ -8,6 +8,8 @@ import copy
 from bs4 import BeautifulSoup
 from ratelimiter import RateLimiter
 
+RUSSIAN_WIKI_PREFIX = 'https://ru.wikipedia.org'
+ENGLISH_WIKI_PREFIX = 'https://en.wikipedia.org'
 
 def get_links(page_content):
     soup = BeautifulSoup(page_content, 'html.parser')
@@ -18,14 +20,18 @@ def is_wiki_link(link):
     return '/wiki/' in link
 
 
+def is_russian_wiki(link):
+    return re.search('[а-яА-Я]', urllib.parse.unquote_plus(link))
+
+
 def get_full_wiki_link(link):
     # если ссылка уже корректно сформирована, то ничего не делаем
     if 'http' not in link:
         # смотрим какой нужен префикс: для русс. или англ. вики
-        if re.search('[а-яА-Я]', urllib.parse.unquote_plus(link)):
-            return 'https://ru.wikipedia.org' + link
+        if is_russian_wiki(link):
+            return RUSSIAN_WIKI_PREFIX + link
         else:
-            return 'https://en.wikipedia.org' + link
+            return ENGLISH_WIKI_PREFIX + link
     else:
         return link
 
@@ -59,7 +65,13 @@ def find_wiki_path(start_link, end_link, rate_limit, max_depth):
         # пока не перебрали все ссылки на текущем уровне глубины
         while not current_links.empty():
             current_link = current_links.get()
-            print(f'parse {current_link}')
+
+            if is_russian_wiki(current_link):
+                print(f'parse { urllib.parse.unquote_plus(current_link[len(RUSSIAN_WIKI_PREFIX):])}')
+                print(f'link {current_link} \n')
+            else:
+                print(f'parse {current_link} \n')
+
             content = get_content(current_link)
 
             if content:
