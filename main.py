@@ -21,6 +21,13 @@ def is_wiki_link(link):
     return re.search('(https://).*(wiki).*(/wiki/)', link)
 
 
+def is_suitable_link(link):
+    return is_wiki_link(link) \
+           and ('File:' not in link) \
+           and ('List:' not in link) \
+           and ('Index:' not in link)
+
+
 def unquote_link(link):
     return urllib.parse.unquote_plus(link)
 
@@ -78,7 +85,7 @@ def find_wiki_path(start_link, end_link, rate_limit, max_depth):
                 for next_link in get_links(content):
                     next_link = get_full_wiki_link(next_link)
 
-                    if is_wiki_link(next_link):
+                    if is_suitable_link(next_link):
 
                         # если нашли искомую ссылку
                         if next_link == end_link:
@@ -107,6 +114,10 @@ def find_wiki_path(start_link, end_link, rate_limit, max_depth):
     print(f'path from {start_link} to {end_link} with depth {max_depth} was not found')
 
 
+def get_wiki_link_lang(link):
+    return re.search(r'(https://)(.*?)(.wiki)', args.start_link).group(2)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Wiki path searcher')
     parser.add_argument('--start_link', type=str, required=True, help='Wiki start page link')
@@ -117,8 +128,17 @@ if __name__ == '__main__':
 
     if not is_wiki_link(args.start_link) or not is_wiki_link(args.end_link):
         print('You have to set only wiki page links')
+        exit(-1)
 
     # получаем префикс языка
-    LANG_PREFIX = re.search(r'(https://)(.*?)(.wiki)', args.start_link).group(2)
+
+    start_link_lang = get_wiki_link_lang(args.start_link)
+    end_link_lang = get_wiki_link_lang(args.end_link)
+
+    if start_link_lang != end_link_lang:
+        print('Wiki pages have to be in same language')
+        exit(-1)
+
+    LANG_PREFIX = start_link_lang
 
     find_wiki_path(args.start_link, args.end_link, args.rate_limit, args.depth)
