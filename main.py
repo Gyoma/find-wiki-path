@@ -11,13 +11,14 @@ from ratelimiter import RateLimiter
 RUSSIAN_WIKI_PREFIX = 'https://ru.wikipedia.org'
 ENGLISH_WIKI_PREFIX = 'https://en.wikipedia.org'
 
+
 def get_links(page_content):
     soup = BeautifulSoup(page_content, 'html.parser')
     return np.array([link['href'] for link in soup.find(id="bodyContent").find_all('a', href=True)])
 
 
 def is_wiki_link(link):
-    return '/wiki/' in link
+    return re.search('(https://).*(wiki).*(/wiki/)', link)
 
 
 def is_russian_wiki(link):
@@ -37,7 +38,6 @@ def get_full_wiki_link(link):
 
 
 def find_wiki_path(start_link, end_link, rate_limit, max_depth):
-
     @RateLimiter(max_calls=rate_limit, period=60)
     def get_content(link):
         response = requests.get(link)
@@ -53,7 +53,7 @@ def find_wiki_path(start_link, end_link, rate_limit, max_depth):
     next_links.put(start_link)
 
     # словарь пар типа [дочерняя ссылка : родительская ссылка]
-    link_chain = {start_link:''}
+    link_chain = {start_link: ''}
 
     # пока не достигли заданного уровня глубины
     while not next_links.empty():
@@ -67,7 +67,7 @@ def find_wiki_path(start_link, end_link, rate_limit, max_depth):
             current_link = current_links.get()
 
             if is_russian_wiki(current_link):
-                print(f'parse { urllib.parse.unquote_plus(current_link[len(RUSSIAN_WIKI_PREFIX):])}')
+                print(f'parse {urllib.parse.unquote_plus(current_link[len(RUSSIAN_WIKI_PREFIX):])}')
                 print(f'link {current_link} \n')
             else:
                 print(f'parse {current_link} \n')
@@ -100,14 +100,13 @@ def find_wiki_path(start_link, end_link, rate_limit, max_depth):
                         # если еще не использовали ссылку и не достигли максимальной глубины поиска
                         if (next_link not in link_chain) and current_depth != max_depth:
                             link_chain[next_link] = current_link
-                            #print(f'add {next_link}')
+                            # print(f'add {next_link}')
                             next_links.put(next_link)
 
     print(f'path from {start_link} to {end_link} with depth {max_depth} was not found')
 
 
 if __name__ == '__main__':
-
     parser = argparse.ArgumentParser(description='Wiki path searcher')
     parser.add_argument('--start_link', type=str, required=True, help='Wiki start page link')
     parser.add_argument('--end_link', type=str, required=True, help='Wiki destination page link')
