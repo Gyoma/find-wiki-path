@@ -8,31 +8,29 @@ import copy
 from bs4 import BeautifulSoup
 from ratelimiter import RateLimiter
 
-RUSSIAN_WIKI_PREFIX = 'https://ru.wikipedia.org'
-ENGLISH_WIKI_PREFIX = 'https://en.wikipedia.org'
+# ограничение на один язык
+LANG_PREFIX = 'en'
 
 
 def get_links(page_content):
     soup = BeautifulSoup(page_content, 'html.parser')
-    return np.array([link['href'] for link in soup.find(id="bodyContent").find_all('a', href=True)])
+    return np.array([unquote_link(link['href']) for link in soup.find(id="bodyContent").find_all('a', href=True)])
 
 
 def is_wiki_link(link):
     return re.search('(https://).*(wiki).*(/wiki/)', link)
 
 
-def is_russian_wiki(link):
-    return re.search('[а-яА-Я]', urllib.parse.unquote_plus(link))
+def unquote_link(link):
+    return urllib.parse.unquote_plus(link)
 
 
 def get_full_wiki_link(link):
+    global LANG_PREFIX
+
     # если ссылка уже корректно сформирована, то ничего не делаем
-    if 'http' not in link:
-        # смотрим какой нужен префикс: для русс. или англ. вики
-        if is_russian_wiki(link):
-            return RUSSIAN_WIKI_PREFIX + link
-        else:
-            return ENGLISH_WIKI_PREFIX + link
+    if 'https' not in link:
+        return 'https://' + LANG_PREFIX + '.wikipedia.org' + link
     else:
         return link
 
@@ -40,8 +38,15 @@ def get_full_wiki_link(link):
 def find_wiki_path(start_link, end_link, rate_limit, max_depth):
     @RateLimiter(max_calls=rate_limit, period=60)
     def get_content(link):
-        response = requests.get(link)
-        return response.content if response.reason == 'OK' else ''
+        try:
+            response = requests.get(link)
+            return response.content if response.reason == 'OK' else ''
+        except Exception as e:
+            print(f'can\'t get content from {link}\n')
+            return ''
+
+    start_link = unquote_link(start_link)
+    end_link = unquote_link(end_link)
 
     # глубина контролируется с помощью 2х очередей
     # current_links - очередь из ссылок текущего уровня глубины
@@ -65,19 +70,15 @@ def find_wiki_path(start_link, end_link, rate_limit, max_depth):
         # пока не перебрали все ссылки на текущем уровне глубины
         while not current_links.empty():
             current_link = current_links.get()
-
-            if is_russian_wiki(current_link):
-                print(f'parse {urllib.parse.unquote_plus(current_link[len(RUSSIAN_WIKI_PREFIX):])}')
-                print(f'link {current_link} \n')
-            else:
-                print(f'parse {current_link} \n')
+            print(f'parse {current_link} \n')
 
             content = get_content(current_link)
 
             if content:
                 for next_link in get_links(content):
+                    next_link = get_full_wiki_link(next_link)
+
                     if is_wiki_link(next_link):
-                        next_link = get_full_wiki_link(next_link)
 
                         # если нашли искомую ссылку
                         if next_link == end_link:
@@ -113,5 +114,11 @@ if __name__ == '__main__':
     parser.add_argument('--rate_limit', type=int, default=20, help='Rate limit per minute')
     parser.add_argument('--depth', type=int, default=5, help='Search depth')
     args = parser.parse_args()
+
+    if not is_wiki_link(args.start_link) or not is_wiki_link(args.end_link):
+        print('You have to set only wiki page links')
+
+    # получаем префикс языка
+    LANG_PREFIX = re.search(r'(https://)(.*?)(.wiki)', args.start_link).group(2)
 
     find_wiki_path(args.start_link, args.end_link, args.rate_limit, args.depth)
