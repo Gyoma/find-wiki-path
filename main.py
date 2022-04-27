@@ -14,18 +14,16 @@ LANG_PREFIX = 'en'
 
 def get_links(page_content):
     soup = BeautifulSoup(page_content, 'html.parser')
-    return np.array([unquote_link(link['href']) for link in soup.find(id="bodyContent").find_all('a', href=True)])
+    content = soup.find(id="bodyContent")
+
+    if content:
+        return np.array([unquote_link(link['href']) for link in content.find_all('a', href=True)])
+    else:
+        return np.empty()
 
 
 def is_wiki_link(link):
     return re.search('(https://).*(wiki).*(/wiki/)', link)
-
-
-def is_suitable_link(link):
-    return is_wiki_link(link) \
-           and ('File:' not in link) \
-           and ('List:' not in link) \
-           and ('Index:' not in link)
 
 
 def unquote_link(link):
@@ -85,7 +83,7 @@ def find_wiki_path(start_link, end_link, rate_limit, max_depth):
                 for next_link in get_links(content):
                     next_link = get_full_wiki_link(next_link)
 
-                    if is_suitable_link(next_link):
+                    if is_wiki_link(next_link):
 
                         # если нашли искомую ссылку
                         if next_link == end_link:
